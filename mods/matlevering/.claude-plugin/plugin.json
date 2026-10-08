@@ -1,0 +1,9 @@
+{
+  "name": "matlevering",
+  "version": "0.1.0",
+  "description": "Shows the meny.no basket and the planned dinners in a pane, in the matlevering repo",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Yngve Molnes"
+  }
+}

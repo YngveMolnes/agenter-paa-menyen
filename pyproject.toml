@@ -1,0 +1,21 @@
+[project]
+name = "matlevering"
+version = "0.1.0"
+description = "Control your meny.no basket from Python, with a meal-planning skill and a Claude Code pane"
+license = "MIT"
+readme = "README.md"
+authors = [
+    { name = "Yngve Molnes", email = "yngve.molnes@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "python-dotenv>=1.2.4",
+    "requests>=2.34.2",
+]
+
+[project.scripts]
+matlevering = "matlevering:main"
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
