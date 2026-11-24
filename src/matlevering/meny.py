@@ -157,7 +157,9 @@ class Meny:
 
     def set_quantities(self, quantities: dict[str, float]) -> dict:
         """Set the quantity of each EAN; 0 removes it. Other items are left alone."""
-        cart = self.get_cart()
+        return self._set_quantities(self.get_cart(), quantities)
+
+    def _set_quantities(self, cart: dict, quantities: dict[str, float]) -> dict:
         existing = {i["ean"]: i for i in cart["items"]}
         missing = [
             ean for ean, q in quantities.items() if q > 0 and ean not in existing
@@ -187,8 +189,9 @@ class Meny:
         return self._put(cart, changed) if changed else cart
 
     def add(self, ean: str, quantity: float = 1) -> dict:
-        current = {i["ean"]: i["quantity"] for i in self.active_items()}
-        return self.set_quantities({ean: current.get(ean, 0) + quantity})
+        cart = self.get_cart()
+        current = {i["ean"]: i["quantity"] for i in self.active_items(cart)}
+        return self._set_quantities(cart, {ean: current.get(ean, 0) + quantity})
 
     def remove(self, ean: str) -> dict:
         return self.set_quantities({ean: 0})
