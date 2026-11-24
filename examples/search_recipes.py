@@ -23,11 +23,13 @@ def search_recipes(query: str) -> list[tuple[str, str]]:
     payload = response.json()
     group = payload.get("recipes") if isinstance(payload, dict) else None
     hits = group.get("hits") if isinstance(group, dict) else None
-    if not isinstance(hits, list):
+    total = group.get("totalCount") if isinstance(group, dict) else None
+    if (type(total) is not int or total < 0 or not isinstance(hits, list)
+            or len(hits) != min(total, PAGE_SIZE)):
         raise ValueError("MENY returned an unexpected recipe search response")
 
     recipes = []
-    for hit in hits[:PAGE_SIZE]:
+    for hit in hits:
         card = hit.get("document") if isinstance(hit, dict) else None
         if not isinstance(card, dict) or card.get("type") != "recipe":
             raise ValueError("MENY returned an unexpected recipe card")

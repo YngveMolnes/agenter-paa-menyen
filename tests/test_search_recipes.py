@@ -19,7 +19,7 @@ class RecipeSearchTests(unittest.TestCase):
         self.output = self.enterContext(patch("sys.stdout", new_callable=io.StringIO))
 
     def test_command_prints_ranked_titles_and_links(self):
-        self.response.json.return_value = {"recipes": {"hits": [
+        self.response.json.return_value = {"recipes": {"totalCount": 2, "hits": [
             card("Ørret med ris", "orret-med-ris", "fisk"),
             card("Fiskesuppe", "fiskesuppe"),
         ]}}
@@ -33,15 +33,22 @@ class RecipeSearchTests(unittest.TestCase):
                          {"query": "fisk og ris", "include": "recipes", "page": 1, "size": 10})
 
     def test_empty_page(self):
-        self.response.json.return_value = {"recipes": {"hits": []}}
+        self.response.json.return_value = {"recipes": {"totalCount": 0, "hits": []}}
         search_recipes.main()
         self.assertEqual(self.output.getvalue(), "No recipes found.\n")
 
     def test_unexpected_payload_or_link_fails_before_printing(self):
-        for payload in ({}, {"recipes": {"hits": [card("Fish", "../cart")]}}):
+        for payload in ({}, {"recipes": {"totalCount": 1, "hits": [card("Fish", "../cart")]}}):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 self.response.json.return_value = payload
                 search_recipes.search_recipes("fisk")
+
+    def test_incomplete_page_is_a_failure_even_if_no_cards_arrive(self):
+        self.response.json.return_value = {"recipes": {"totalCount": 7, "hits": []}}
+        with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit) as raised:
+            search_recipes.main()
+        self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(self.output.getvalue(), "")
 
     def test_http_failure_exits_without_results(self):
         self.response.raise_for_status.side_effect = requests.HTTPError("unavailable")
