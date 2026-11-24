@@ -106,7 +106,8 @@ claude --plugin-dir mods/matlevering
 It switches on only inside this repo and refreshes the basket after any `matlevering` command, and
 every 5 minutes. The dinners refresh when a meal plan is written. `/meny` opens the pane and
 refreshes both. The pane opens by itself on terminals at least 144 columns wide; `/meny` opens it
-at any width. The status line shows "Basket: N items, X kr".
+at any width. The status line shows "Basket: N items, X kr". If the next basket read fails, the
+pane keeps the last successful basket and its update time, and `/meny` reports the failure.
 
 Tests: `claude plugin test mods/matlevering`.
 

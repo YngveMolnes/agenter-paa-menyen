@@ -27,6 +27,7 @@ declare module 'claude-code' {
       cartError: string | null
       store: string | null
       plan: DinnerPlan | null
+      planError: string | null
       isLoading: boolean
       updatedAt: number
     }
