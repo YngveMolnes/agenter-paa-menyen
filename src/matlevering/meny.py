@@ -9,6 +9,7 @@ Cart semantics, verified against the live API (see docs/meny-api.md):
 """
 
 import copy
+import math
 import uuid
 from datetime import UTC, datetime
 
@@ -159,6 +160,8 @@ class Meny:
         """Set the quantity of each EAN; 0 removes it. Other items are left alone."""
         cart = self.get_cart()
         existing = {i["ean"]: i for i in cart["items"]}
+        if not all(-math.inf < q < math.inf for q in quantities.values()):
+            raise ValueError("Cart quantities must be finite")
         missing = [
             ean for ean, q in quantities.items() if q > 0 and ean not in existing
         ]
