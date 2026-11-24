@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Per Oskar Isdahl
 """Find published MENY recipes by title and link. No store or login required."""
 
 import argparse
