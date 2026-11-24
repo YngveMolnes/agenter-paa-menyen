@@ -83,8 +83,10 @@ uv run python examples/add_from_list.py examples/shopping-list.example.json     
 uv run python examples/add_from_list.py examples/shopping-list.example.json --apply  # change the basket
 ```
 
-`add_from_list.py` checks every product against your store, then sets the quantities from the list
-(so 6 bananas means 6 in the basket, not 6 more). It only changes the basket with `--apply`.
+`add_from_list.py` previews absolute quantities (6 bananas means 6 in the basket).
+When the list includes positive quantities, it requires a selected store and skips products
+unavailable there. A zero removes an existing line, even if the store no longer sells it.
+Use `--apply` to write the changes in one batch.
 
 ## Claude Code mod: basket and dinners pane
 
