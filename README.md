@@ -73,7 +73,13 @@ meny.set_quantities({"7048840000029": 2, "7038010009457": 1})
 
 ## Examples
 
-Small scripts in `examples/`. They all use your saved session and the store on your profile.
+Find published MENY recipes without logging in. Results are titles and links in MENY's search order:
+
+```sh
+uv run python examples/search_recipes.py fisk og ris
+```
+
+The basket and product examples use your saved session and the store on your profile.
 
 ```sh
 uv run python examples/search.py laktosefri kesam            # results with kr/kg and offers
