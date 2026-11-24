@@ -13,11 +13,18 @@ const cart = atom({ plugin: 'matlevering', key: 'cart' } as const, null as CartV
 const cartError = atom({ plugin: 'matlevering', key: 'cartError' } as const, null as string | null)
 const store = atom({ plugin: 'matlevering', key: 'store' } as const, null as string | null)
 const plan = atom({ plugin: 'matlevering', key: 'plan' } as const, null as DinnerPlan | null)
+const planError = atom({ plugin: 'matlevering', key: 'planError' } as const, null as string | null)
 const isLoading = atom({ plugin: 'matlevering', key: 'isLoading' } as const, false)
 const updatedAt = atom({ plugin: 'matlevering', key: 'updatedAt' } as const, 0)
 
 let isRepo = false
-let isRefreshing = false
+type RefreshScope = { basket: boolean; plan: boolean }
+let queued: { scope: RefreshScope; result: Promise<string> } | undefined
+let previous: Promise<unknown> = Promise.resolve()
+
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 async function loadPlan($: EngineInterface) {
   if (!(await $.fs.exists('plans'))) return update($, plan, () => null)
@@ -33,37 +40,71 @@ async function loadPlan($: EngineInterface) {
 async function loadCart($: EngineInterface) {
   const run = (args: string[]) =>
     $.process.run(['uv', 'run', 'matlevering', ...args], { timeoutMs: 60_000 })
-  const [cartRun, storeRun] = await Promise.all([run(['cart', '--json']), run(['store'])])
-  if (cartRun.exitCode !== 0) {
-    await update($, cartError, () => lastLine(cartRun.stderr) || 'Could not read the basket.')
-    return
+  let view: CartView
+  let storeName: string | null
+  try {
+    const [basketRead, storeRead] = await Promise.allSettled([run(['cart', '--json']), run(['store'])])
+    if (basketRead.status === 'rejected') throw basketRead.reason
+    const cartRun = basketRead.value
+    if (cartRun.exitCode !== 0) throw new Error(lastLine(cartRun.stderr) || 'Could not read the basket.')
+    if (cartRun.isStdoutTruncated) throw new Error('The basket response was truncated.')
+    view = summarizeCart(cartRun.stdout)
+    storeName = storeRead.status === 'fulfilled' && storeRead.value.exitCode === 0
+      ? (storeRead.value.stdout.split('\n')[0] ?? '').trim() : null
+  } catch (err) {
+    const error = message(err)
+    await update($, cartError, () => error)
+    const status = `Basket refresh failed. ${error}`
+    await $.ui.status(status)
+    return status
   }
-  const view = summarizeCart(cartRun.stdout)
+
   await update($, cart, () => view)
+  await update($, store, () => storeName)
+  await update($, updatedAt, () => Date.now())
   await update($, cartError, () => null)
-  await update($, store, () => (storeRun.exitCode === 0 ? (storeRun.stdout.split('\n')[0] ?? '').trim() : null))
-  $.ui.status(
-    `Basket: ${view.lines.length} items, ${kroner(view.total)}` +
-      (view.unavailableCount ? `, ${view.unavailableCount} unavailable` : ''),
-  )
+  const status = `Basket: ${view.lines.length} items, ${kroner(view.total)}`
+  await $.ui.status(status + (view.unavailableCount ? `, ${view.unavailableCount} unavailable` : ''))
+  return status + '.'
 }
 
-async function refresh($: EngineInterface, what: 'all' | 'cart' | 'plan' = 'all') {
-  if (!isRepo || isRefreshing) return
-  isRefreshing = true
-  await update($, isLoading, () => true)
+async function refreshPlan($: EngineInterface) {
   try {
-    await Promise.all([
-      what !== 'plan' ? loadCart($) : undefined,
-      what !== 'cart' ? loadPlan($) : undefined,
-    ])
-    await update($, updatedAt, () => Date.now())
+    await loadPlan($)
+    await update($, planError, () => null)
+    return ''
   } catch (err) {
-    await update($, cartError, () => (err instanceof Error ? err.message : String(err)))
-  } finally {
-    isRefreshing = false
-    await update($, isLoading, () => false)
+    const error = message(err)
+    await update($, planError, () => error)
+    return `Dinner plan refresh failed. ${error}`
   }
+}
+
+function refresh($: EngineInterface, what: 'all' | 'cart' | 'plan' = 'all'): Promise<string> {
+  if (!isRepo) return Promise.resolve('Open the Matlevering repository to refresh the basket.')
+  if (!queued) {
+    const scope = { basket: false, plan: false }
+    const result = previous.then(async () => {
+      queued = undefined
+      await update($, isLoading, () => true)
+      try {
+        const reports = await Promise.all([
+          scope.basket ? loadCart($) : '',
+          scope.plan ? refreshPlan($) : '',
+        ])
+        return reports.filter(Boolean).join(' ')
+      } finally {
+        await update($, isLoading, () => false)
+      }
+    })
+    queued = { scope, result }
+    // Coalesce requests waiting behind one active read. Each waiter receives
+    // the result of a pass begun after its request, even after a failed pass.
+    previous = result.catch(() => {})
+  }
+  if (what !== 'plan') queued.scope.basket = true
+  if (what !== 'cart') queued.scope.plan = true
+  return queued.result
 }
 
 export const register: Register = on => {
@@ -85,9 +126,7 @@ export const register: Register = on => {
 
   on('command.run', { command: 'meny' }, async $ => {
     await $.ui.open({ id: PANE, title: TITLE })
-    await refresh($)
-    const view = await read($, cart)
-    return { text: view ? `Basket: ${view.lines.length} items, ${kroner(view.total)}.` : 'Basket refreshed.' }
+    return { text: await refresh($) }
   })
 
   // Keep the pane current when the basket or a plan changes during the session.
@@ -109,11 +148,12 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
-    const [view, error, storeName, dinnerPlan, loading, at] = await Promise.all([
+    const [view, error, storeName, dinnerPlan, dinnerError, loading, at] = await Promise.all([
       read($, cart),
       read($, cartError),
       read($, store),
       read($, plan),
+      read($, planError),
       read($, isLoading),
       read($, updatedAt),
     ])
@@ -165,12 +205,13 @@ export const register: Register = on => {
         <Box justifyContent="space-between" paddingX={1}>
           <Text bold>🛒 Matlevering</Text>
           <Text dimColor>
-            {loading ? '↻ updating…' : time ? `updated ${time}` : ''}
+            {loading ? '↻ updating…' : time ? `basket updated ${time}` : ''}
           </Text>
         </Box>
 
         <Card title="Dinners" aside={dinnerPlan?.file} color="claude">
-          {dinners.length === 0 && <Text dimColor>No meal plan in plans/ yet.</Text>}
+          {dinnerError && <Text color="error" wrap="wrap">✗ {dinnerError}</Text>}
+          {dinners.length === 0 && !dinnerError && <Text dimColor>No meal plan in plans/ yet.</Text>}
           {dinners.map(d => {
             const when = relativeDay(d.day, today)
             return (

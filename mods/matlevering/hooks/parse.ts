@@ -31,25 +31,31 @@ export function isUnavailable(item: CartItem): boolean {
 /** Summarise `matlevering cart --json` output. */
 export function summarizeCart(json: string): CartView {
   const cart = JSON.parse(json) as { items?: CartItem[] }
-  const lines = (cart.items ?? [])
-    .filter(item => !item.__removed__)
-    .map(item => ({
-      ean: item.ean,
-      title: [item.product?.title, item.product?.subtitle].filter(Boolean).join(' ') || item.ean,
-      quantity: item.quantity,
-      lineTotal: item.pricePerUnit * item.quantity,
-      isUnavailable: isUnavailable(item),
-      isOffer: item.product?.isOffer === true,
-      saved:
-        item.product?.isOffer && item.product.pricePerUnitOriginal
-          ? Math.max(0, (item.product.pricePerUnitOriginal - item.pricePerUnit) * item.quantity)
-          : 0,
-    }))
+  if (!Array.isArray(cart?.items)) throw new Error('The basket response has no item list.')
+  const active = cart.items.filter(item => !item.__removed__)
+  if (active.some(item => !Number.isFinite(item.quantity) || !Number.isFinite(item.pricePerUnit))) {
+    throw new Error('The basket has a line without a valid quantity or price.')
+  }
+  const lines = active.map(item => ({
+    ean: item.ean,
+    title: [item.product?.title, item.product?.subtitle].filter(Boolean).join(' ') || item.ean,
+    quantity: item.quantity,
+    lineTotal: item.pricePerUnit * item.quantity,
+    isUnavailable: isUnavailable(item),
+    isOffer: item.product?.isOffer === true,
+    saved:
+      item.product?.isOffer && item.product.pricePerUnitOriginal
+        ? Math.max(0, (item.product.pricePerUnitOriginal - item.pricePerUnit) * item.quantity)
+        : 0,
+  }))
+  const total = lines.reduce((sum, line) => sum + line.lineTotal, 0)
+  const saved = lines.reduce((sum, line) => sum + line.saved, 0)
+  if (!Number.isFinite(total) || !Number.isFinite(saved)) throw new Error('The basket totals are invalid.')
   return {
     lines,
-    total: lines.reduce((sum, line) => sum + line.lineTotal, 0),
+    total,
     unavailableCount: lines.filter(line => line.isUnavailable).length,
-    saved: lines.reduce((sum, line) => sum + line.saved, 0),
+    saved,
   }
 }
 
