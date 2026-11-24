@@ -62,7 +62,7 @@ for ean, qty in wanted.items():
 if not changes:
     print("Nothing to change.")
 elif apply:
-    meny.set_quantities(changes)
+    meny.set_quantities(changes, products=products)
     print(f"Updated {len(changes)} item(s).")
 else:
     print("Dry run. Add --apply to change the basket.")

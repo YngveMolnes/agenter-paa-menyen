@@ -81,6 +81,19 @@ class ShoppingListTests(unittest.TestCase):
         self.assertEqual(changed[0]["quantity"], 1.5)
         self.assertTrue(changed[1]["__removed__"])
 
+    def test_new_line_uses_the_catalog_snapshot_checked_at_preview(self):
+        self.products = [
+            {"ean": "new", "title": "Fresh", "pricePerUnit": 12,
+             "comparePricePerUnit": 12, "availableInventory": 3},
+        ]
+        self.run_list({"new": 0.5, "missing": 1}, apply=True)
+        self.catalog.get.assert_called_once()
+        self.session.put.assert_called_once()
+        changed, = self.session.put.call_args.kwargs["json"]["items"]
+        self.assertEqual(changed["ean"], "new")
+        self.assertEqual(changed["quantity"], 0.5)
+        self.assertEqual(changed["product"], self.products[0])
+
     def test_missing_store_stops_positive_batch(self):
         self.store = {}
         with self.assertRaisesRegex(SystemExit, "Choose a store"):
