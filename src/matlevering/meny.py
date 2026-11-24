@@ -155,15 +155,26 @@ class Meny:
             "shouldSlice": False,
         }
 
-    def set_quantities(self, quantities: dict[str, float]) -> dict:
-        """Set the quantity of each EAN; 0 removes it. Other items are left alone."""
-        cart = self.get_cart()
+    def set_quantities(
+        self, quantities: dict[str, float], *, products: dict[str, dict] | None = None
+    ) -> dict:
+        """Set absolute quantities (0 removes). Other items are left alone.
+
+        Pass products read at this store to reuse a checked catalog snapshot
+        for new lines. Otherwise missing products are looked up in one batch.
+        """
+        return self._set_quantities(self.get_cart(), quantities, products=products)
+
+    def _set_quantities(
+        self, cart: dict, quantities: dict[str, float], *, products: dict[str, dict] | None = None
+    ) -> dict:
         existing = {i["ean"]: i for i in cart["items"]}
         missing = [
             ean for ean, q in quantities.items() if q > 0 and ean not in existing
         ]
-        found = self.products(missing) if missing else {}
-        if unknown := [ean for ean in missing if ean not in found]:
+        if products is None:
+            products = self.products(missing) if missing else {}
+        if unknown := [ean for ean in missing if products.get(ean, {}).get("ean") != ean]:
             raise ValueError(f"Unknown EAN(s): {', '.join(unknown)}")
 
         changed = []
@@ -171,7 +182,7 @@ class Meny:
             item = existing.get(ean)
             if item is None:
                 if quantity > 0:
-                    changed.append(self._new_item(found[ean], quantity))
+                    changed.append(self._new_item(products[ean], quantity))
                 continue
             item = copy.deepcopy(item)
             item["__rev__"] = item.get("__rev__", 1) + 1
@@ -187,8 +198,9 @@ class Meny:
         return self._put(cart, changed) if changed else cart
 
     def add(self, ean: str, quantity: float = 1) -> dict:
-        current = {i["ean"]: i["quantity"] for i in self.active_items()}
-        return self.set_quantities({ean: current.get(ean, 0) + quantity})
+        cart = self.get_cart()
+        current = {i["ean"]: i["quantity"] for i in self.active_items(cart)}
+        return self._set_quantities(cart, {ean: current.get(ean, 0) + quantity})
 
     def remove(self, ean: str) -> dict:
         return self.set_quantities({ean: 0})

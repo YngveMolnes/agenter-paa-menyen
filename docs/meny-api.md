@@ -30,7 +30,7 @@ The webshop is NorgesGruppen's shared "framework-core" platform; MENY is chain `
 | Method | Purpose |
 |--------|---------|
 | GET    | Fetch the server-side cart |
-| PUT    | Upload the whole cart (it replaces the cart, not a single line) |
+| PUT    | Merge the supplied item changes into the cart |
 | DELETE | Clear the cart |
 
 Without the `Authorization` header it returns `401 {"message":"The request is missing the authorization header"}`.
@@ -52,6 +52,7 @@ PUT body (verified 2026-10-09):
 Merge semantics (verified):
 - Items in the body are upserted per EAN. Items left out are untouched, so sending `items: []` changes nothing.
 - A quantity change is accepted with or without bumping the item `__rev__`; the client bumps it anyway.
+- The client computes a relative add from one cart snapshot. Another device can still change the same item before the write. If the write response is lost, inspect the current basket before deciding whether to add more.
 - Removal: send the item with `__removed__: true`. The server keeps it as a tombstone in `items`.
 - `DELETE` empties `items` and bumps the cart `__rev__`.
 
